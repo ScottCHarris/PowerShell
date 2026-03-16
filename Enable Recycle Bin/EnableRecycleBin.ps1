@@ -1,1 +1,0 @@
-Enable-ADOptionalFeature -Identity 'recycle bin feature' -Scope ForestOrConfigurationSet -Target 'adatum.com' -Confirm:$false
