@@ -1,4 +1,5 @@
-# Uptime and Reboot Tracker for single computer (network ot subnet is ~line 50):
+## Network or subnet is line 37 and includes single computer
+# Uptime and Reboot Tracker for single computer 
 
 ## Getting to default on blank to local was hard
 $computerName = Read-Host "Enter the computer name (leave blank for local)"
@@ -34,16 +35,16 @@ $result | Format-List
 
 Write-Host "`nStatus: $statusLabel ($status)" -ForegroundColor $color
 
-# Uptime and Reboot Tracker for network or subnet:
+# Uptime and Reboot Tracker for network or subnet or single computer:
 
 # ============================
-# Multi-Computer Uptime Tool
+# From CPilot with a few small Scott Harris tweaks
 # ============================
 
 Write-Host "Choose scan type:"
 Write-Host "1. Entire AD Network"
 Write-Host "2. Subnet Scan"
-Write-Host "3. Manual Computer List (blank = local)"
+Write-Host "3. Manual Computer List (choose this for local)"
 $choice = Read-Host "Enter 1, 2, or 3"
 
 # Accept threshold
