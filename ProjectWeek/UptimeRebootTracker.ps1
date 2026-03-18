@@ -1,4 +1,4 @@
-# Uptime and Reboot Tracker for single computer:
+# Uptime and Reboot Tracker for single computer (network ot subnet is ~line 50):
 
 ## Getting to default on blank to local was hard
 $computerName = Read-Host "Enter the computer name (leave blank for local)"
@@ -6,7 +6,7 @@ if ([string]::IsNullOrWhiteSpace($computerName)) {$computerName = $env:COMPUTERN
 $lastBoot = $os.LastBootUpTime
 $uptime   = ((Get-Date) - $lastBoot).days
 ## Make sure you convert the read-host to an integer
-$threshold = [int](Read-Host "Enter uptime threshold in days")
+$threshold = [int](Read-Host "Enter days since reboot threshold in days")
 $reviewPoint = [math]::Round($threshold * 0.75)
 
 try {$os = Get-CimInstance Win32_OperatingSystem -ComputerName $computerName -ErrorAction Stop}
@@ -35,7 +35,121 @@ $result | Format-List
 Write-Host "`nStatus: $statusLabel ($status)" -ForegroundColor $color
 
 # Uptime and Reboot Tracker for network or subnet:
+
+# ============================
+# Multi-Computer Uptime Tool
+# ============================
+
 Write-Host "Choose scan type:"
-Write-Host "1. Entire network"
-Write-Host "2. Subnet"
-$scanChoice = Read-Host "Enter 1 or 2"
+Write-Host "1. Entire AD Network"
+Write-Host "2. Subnet Scan"
+Write-Host "3. Manual Computer List (blank = local)"
+$choice = Read-Host "Enter 1, 2, or 3"
+
+# Accept threshold
+$threshold = [int](Read-Host "Enter uptime threshold in days")
+$reviewPoint = [math]::Round($threshold * 0.75)
+
+# Collect target computers
+$computers = @()
+
+switch ($choice) {
+
+    "1" {
+        Write-Host "Querying Active Directory..."
+        $computers = Get-ADComputer -Filter * | Select-Object -ExpandProperty Name
+    }
+
+    "2" {
+        $subnet = Read-Host "Enter subnet prefix (example: 192.168.1)"
+        foreach ($i in 1..254) {
+            $ip = "$subnet.$i"
+            if (Test-Connection -ComputerName $ip -Count 1 -Quiet) {
+                $computers += $ip
+            }
+        }
+    }
+
+    "3" {
+        $list = Read-Host "Enter computer names separated by commas (blank = local)"
+
+        if ([string]::IsNullOrWhiteSpace($list)) {
+            # Default to local machine
+            $computers = @($env:COMPUTERNAME)
+        }
+        else {
+            # Split into one or more computers
+            $computers = $list.Split(",") | ForEach-Object { $_.Trim() }
+        }
+    }
+
+    default {
+        Write-Host "Invalid selection." -ForegroundColor Red
+        return
+    }
+}
+
+# Store results
+$results = @()
+
+foreach ($computer in $computers) {
+
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ComputerName $computer -ErrorAction Stop
+        $lastBoot = $os.LastBootUpTime
+        $days = ((Get-Date) - $lastBoot).Days
+
+        # Classification
+        if ($days -gt $threshold) {
+            $status = "Overdue"
+            $indicator = "FAIL"
+            $color = "Red"
+        }
+        elseif ($days -ge $reviewPoint) {
+            $status = "Review"
+            $indicator = "WARNING"
+            $color = "Yellow"
+        }
+        else {
+            $status = "Normal"
+            $indicator = "PASS"
+            $color = "Green"
+        }
+
+        # Color-coded summary line
+        Write-Host "$computer : $indicator ($status)" -ForegroundColor $color
+
+        # Build object
+        $results += [PSCustomObject]@{
+            ComputerName = $computer
+            LastBootTime = $lastBoot
+            UptimeDays   = $days
+            Status       = $status
+            Indicator    = $indicator
+        }
+    }
+    catch {
+        # Query failed (offline, DNS fail, CIM fail, access denied, etc.)
+        Write-Host "$computer : FAIL (Query Failed)" -ForegroundColor DarkYellow
+
+        $results += [PSCustomObject]@{
+            ComputerName = $computer
+            LastBootTime = $null
+            UptimeDays   = $null
+            Status       = "Failed"
+            Indicator    = "FAIL"
+        }
+    }
+}
+
+# Display results table
+Write-Host "`n===== UPTIME RESULTS ====="
+$results | Format-Table -AutoSize
+
+# Optional CSV export
+$export = Read-Host "`nExport results to CSV? (y/n)"
+if ($export -eq "y") {
+    $path = Read-Host "Enter CSV path (example: C:\uptime.csv)"
+    $results | Export-Csv -Path $path -NoTypeInformation
+    Write-Host "Exported to $path" -ForegroundColor Green
+}
